@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BIG BILLION DELAYS — the delivery that never arrives</title>
+<meta property="og:title" content="BIG BILLION DELAYS — the delivery that never arrives">
+<meta property="og:description" content="An endless runner about chasing a parcel that is forever 'out for delivery'. How many days can you survive customer care?">
+<meta property="og:type" content="website">
+<meta name="description" content="An endless runner about chasing a parcel that is forever 'out for delivery'. How many days can you survive customer care?">
+<style>
+  :root{
+    --fk-blue:#2874F0;
+    --fk-blue-dk:#1B5AD0;
+    --fk-yellow:#FFE11B;
+    --fk-ink:#212121;
+    --fk-cloud:#F1F3F6;
+    --fk-white:#FFFFFF;
+    --alert-red:#FF6161;
+    --ok-green:#388E3C;
+    --display:"Arial Black", Impact, "Segoe UI Black", sans-serif;
+    --ui:system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, Menlo, Consolas, "Courier New", monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    background:var(--fk-cloud);
+    font-family:var(--ui);
+    color:var(--fk-ink);
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%;
+    overscroll-behavior:none;
+  }
+  button{font-family:var(--ui);}
+  button:focus-visible, a:focus-visible{outline:3px solid var(--fk-yellow); outline-offset:2px;}
+
+  .app{width:100%; max-width:1020px; padding:0 10px 14px;}
+
+  /* ---------- App bar ---------- */
+  .appbar{
+    background:var(--fk-blue);
+    border-radius:0 0 12px 12px;
+    padding:10px 14px 12px;
+    box-shadow:0 4px 14px rgba(40,116,240,.28);
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+  }
+  .wordmark{
+    color:#fff; font-family:var(--display);
+    font-size:clamp(15px,2.6vw,21px);
+    letter-spacing:.5px; line-height:1; white-space:nowrap;
+    text-shadow:2px 2px 0 var(--fk-blue-dk);
+    font-style:italic;
+  }
+  .wordmark em{font-style:italic; color:var(--fk-yellow);}
+  .searchbox{
+    flex:1 1 180px; min-width:140px;
+    background:#fff; border-radius:6px;
+    padding:8px 12px; font-size:13px; color:#878787;
+    display:flex; align-items:center; gap:8px;
+    user-select:none; cursor:not-allowed;
+    box-shadow:0 1px 3px rgba(0,0,0,.15) inset;
+  }
+  .searchbox .mag{opacity:.7;}
+  .appbar .mutebtn{
+    background:var(--fk-blue-dk); color:#fff; border:none;
+    border-radius:8px; padding:8px 12px; font-size:14px; font-weight:700;
+    cursor:pointer; white-space:nowrap;
+  }
+  .appbar .mutebtn[aria-pressed="true"]{background:#123f92; opacity:.85;}
+
+  /* ---------- Tracking card ---------- */
+  .card{
+    background:var(--fk-white);
+    border-radius:14px;
+    margin-top:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.08);
+    overflow:hidden;
+  }
+  .trackhead{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 14px;
+    border-bottom:1px solid #E7EAF0;
+    background:linear-gradient(#fff,#FAFBFD);
+  }
+  .trackid{
+    font-family:var(--mono); font-size:12px; color:#6b7280;
+    background:var(--fk-cloud); border-radius:999px; padding:4px 10px;
+    white-space:nowrap;
+  }
+  .status{
+    flex:1 1 220px; min-width:0;
+    font-size:13.5px; font-weight:700; color:var(--fk-blue-dk);
+    display:flex; align-items:center; gap:8px;
+  }
+  .status .dot{
+    width:9px; height:9px; border-radius:50%;
+    background:var(--ok-green); flex:none;
+    animation:pulse 1.4s ease-in-out infinite;
+  }
+  .status .txt{
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .status .txt.swap{opacity:0; transform:translateY(6px);}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.55}}
+  .daychip{
+    font-family:var(--display); font-size:15px; letter-spacing:.5px;
+    background:var(--fk-yellow); color:var(--fk-ink);
+    border-radius:8px; padding:5px 10px; white-space:nowrap;
+    box-shadow:0 2px 0 #d9bd00;
+  }
+  .bestchip{
+    font-size:11.5px; font-weight:700; color:#6b7280; white-space:nowrap;
+  }
+
+  /* ---------- Stage ---------- */
+  .stage{
+    position:relative; width:100%;
+    aspect-ratio:960/340;
+    background:#DCE9FB;
+    touch-action:none;
+    user-select:none;
+  }
+  .stage:focus-visible{outline:3px solid var(--fk-yellow); outline-offset:-3px;}
+  canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
+
+  /* Cancel meter + button */
+  .cancelwrap{
+    position:absolute; left:10px; bottom:10px; z-index:5;
+    display:flex; align-items:center; gap:8px;
+    pointer-events:none;
+  }
+  .cancelmeter{
+    width:clamp(110px,20vw,180px); height:14px;
+    background:rgba(255,255,255,.85); border:2px solid var(--fk-blue-dk);
+    border-radius:999px; overflow:hidden;
+    box-shadow:0 1px 4px rgba(0,0,0,.18);
+  }
+  .cancelmeter .fill{
+    height:100%; width:0%;
+    background:linear-gradient(90deg,var(--fk-blue),var(--fk-blue-dk));
+    border-radius:999px; transition:width .15s linear;
+  }
+  .cancelbtn{
+    pointer-events:auto;
+    border:none; border-radius:999px;
+    background:#B9C4D6; color:#fff;
+    font-weight:800; font-size:11.5px; letter-spacing:.4px;
+    padding:7px 12px; cursor:not-allowed;
+    box-shadow:0 2px 0 rgba(0,0,0,.15);
+    white-space:nowrap;
+  }
+  .cancelbtn.ready{
+    background:var(--alert-red); cursor:pointer;
+    animation:readyPulse 1s ease-in-out infinite;
+  }
+  @keyframes readyPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+  @media (prefers-reduced-motion:reduce){
+    .cancelbtn.ready, .status .dot{animation:none;}
+  }
+
+  /* Toasts */
+  .toasts{
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    display:flex; flex-direction:column; gap:6px; align-items:center;
+    z-index:6; pointer-events:none; width:min(92%,560px);
+  }
+  .toast{
+    background:rgba(33,33,33,.92); color:#fff;
+    font-size:12.5px; font-weight:600;
+    border-radius:999px; padding:7px 14px;
+    box-shadow:0 4px 12px rgba(0,0,0,.25);
+    opacity:0; transform:translateY(-8px);
+    transition:opacity .3s ease, transform .3s ease;
+    text-align:center; max-width:100%;
+  }
+  .toast.show{opacity:1; transform:translateY(0);}
+  .toast.good{background:var(--ok-green);}
+  .toast.bad{background:var(--alert-red);}
+  .toast.blue{background:var(--fk-blue);}
+
+  /* ---------- Overlays ---------- */
+  .overlay{
+    position:absolute; inset:0; z-index:10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:14px; gap:8px;
+  }
+  .overlay.hidden{display:none;}
+  #startOverlay{
+    background:linear-gradient(160deg, var(--fk-blue) 0%, var(--fk-blue-dk) 78%);
+    color:#fff;
+  }
+  .herowordmark{
+    font-family:var(--display); font-style:italic;
+    font-size:clamp(26px,6.4vw,58px); line-height:.98; letter-spacing:.5px;
+    text-shadow:3px 3px 0 rgba(0,0,0,.28);
+  }
+  .herowordmark .yellow{color:var(--fk-yellow);}
+  .burst{
+    position:relative; margin-top:4px;
+    background:var(--fk-yellow); color:var(--fk-ink);
+    font-family:var(--display); font-size:clamp(11px,2.3vw,16px);
+    padding:7px 16px; border-radius:6px;
+    transform:rotate(-2.5deg);
+    box-shadow:0 3px 0 #cdb000;
+  }
+  .salecopy{font-size:clamp(11px,2.1vw,14px); opacity:.92; max-width:520px; font-weight:600;}
+  .startprompt{
+    margin-top:8px;
+    background:var(--fk-yellow); color:var(--fk-ink); border:none;
+    font-family:var(--display); font-size:clamp(13px,2.6vw,18px);
+    padding:11px 22px; border-radius:10px; cursor:pointer;
+    box-shadow:0 4px 0 #cdb000;
+    transition:transform .12s ease;
+  }
+  .startprompt:active{transform:translateY(3px);}
+  .beststart{font-size:12px; opacity:.85; font-weight:700;}
+
+  #overOverlay{background:rgba(241,243,246,.94); color:var(--fk-ink);}
+  .stamp{
+    font-family:var(--display); font-size:clamp(20px,5vw,42px);
+    color:var(--alert-red);
+    border:5px solid var(--alert-red); border-radius:10px;
+    padding:8px 20px; transform:rotate(-6deg);
+    letter-spacing:1px; background:rgba(255,255,255,.6);
+    box-shadow:0 6px 18px rgba(255,97,97,.3);
+  }
+  .stamp-in{animation:stampIn .45s cubic-bezier(.2,1.6,.4,1) both;}
+  @keyframes stampIn{0%{transform:rotate(-6deg) scale(2.4);opacity:0}60%{transform:rotate(-6deg) scale(.94);opacity:1}100%{transform:rotate(-6deg) scale(1)}}
+  @media (prefers-reduced-motion:reduce){.stamp-in{animation:none;}}
+  .overline{font-size:clamp(12px,2.4vw,15px); font-weight:700; color:#4b5563;}
+  .overstats{font-size:clamp(12px,2.4vw,15px); font-weight:800;}
+  .consolation{
+    font-size:12px; color:#6b7280; font-weight:600;
+    background:#fff; border-radius:999px; padding:6px 14px;
+    box-shadow:0 1px 4px rgba(0,0,0,.1);
+  }
+  .overbtns{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:6px;}
+  .againbtn{
+    background:var(--fk-blue); color:#fff; border:none;
+    font-family:var(--display); font-size:clamp(13px,2.6vw,17px);
+    padding:11px 22px; border-radius:10px; cursor:pointer;
+    box-shadow:0 4px 0 var(--fk-blue-dk);
+  }
+  .againbtn:active{transform:translateY(3px);}
+  .receiptbtn{
+    background:#fff; color:var(--fk-blue-dk);
+    border:2px solid var(--fk-blue);
+    font-family:var(--display); font-size:clamp(11px,2.2vw,14px);
+    padding:10px 16px; border-radius:10px; cursor:pointer;
+    box-shadow:0 3px 0 var(--fk-blue);
+  }
+  .receiptbtn:active{transform:translateY(3px);}
+
+  /* Footer */
+  .foot{
+    display:flex; flex-wrap:wrap; gap:6px 14px; justify-content:space-between; align-items:center;
+    padding:9px 14px; border-top:1px solid #E7EAF0;
+    font-size:11px; color:#8a929e; background:#FAFBFD;
+  }
+  .foot .hint{font-weight:600;}
+  .foot .legal{font-style:italic;}
+  kbd{
+    font-family:var(--mono); font-size:10px; background:#fff;
+    border:1px solid #d4d9e2; border-bottom-width:2px; border-radius:4px; padding:1px 5px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="appbar">
+    <div class="wordmark">BIG <em>BILLION</em> DELAYS</div>
+    <div class="searchbox" aria-hidden="true"><span class="mag">🔍</span><span>Search for 'where is my order'</span></div>
+    <button class="mutebtn" id="muteBtn" aria-pressed="false" title="Mute sound (M)">🔊 Sound</button>
+  </div>
+
+  <div class="card">
+    <div class="trackhead">
+      <span class="trackid">FMPP4111648148</span>
+      <div class="status"><span class="dot"></span><span class="txt" id="statusTxt">Out for delivery 🚚</span></div>
+      <span class="daychip" id="dayChip">DAY 1</span>
+      <span class="bestchip" id="bestChip">BEST 0</span>
+    </div>
+
+    <div class="stage" id="stage" tabindex="0" role="application"
+         aria-label="Big Billion Delays game. Press space or tap to jump. Down arrow or swipe down to duck.">
+      <canvas id="cv"></canvas>
+
+      <div class="toasts" id="toasts" aria-live="polite"></div>
+
+      <div class="cancelwrap">
+        <div class="cancelmeter" aria-hidden="true"><div class="fill" id="cancelFill"></div></div>
+        <button class="cancelbtn" id="cancelBtn" disabled>RAISE MANUAL CANCELLATION</button>
+      </div>
+
+      <div class="overlay" id="startOverlay">
+        <div class="herowordmark">BIG <span class="yellow">BILLION</span><br>DELAYS</div>
+        <div class="burst" id="saleBurst">UP TO 100% OFF YOUR PATIENCE</div>
+        <div class="salecopy" id="saleCopy">Doorbuster deals! Doorbell optional. Delivery… eventually.</div>
+        <button class="startprompt" id="startBtn">TAP / SPACE TO START CHASING</button>
+        <div class="beststart" id="bestStart">⭐ Best: 0 days chased</div>
+      </div>
+
+      <div class="overlay hidden" id="overOverlay">
+        <div class="stamp" id="stampEl">DELIVERY RESCHEDULED</div>
+        <div class="overline" id="overLine">Now attempted on Jul 05.</div>
+        <div class="overstats" id="overStats">You chased for 0 days. Best: 0.</div>
+        <div class="consolation" id="overConsole">You've earned 2 SuperCoins for your patience.</div>
+        <div class="overbtns">
+          <button class="againbtn" id="againBtn">TAP / SPACE TO KEEP CHASING</button>
+          <button class="receiptbtn" id="receiptBtn">🧾 SAVE RECEIPT</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span class="hint"><kbd>Space</kbd>/<kbd>↑</kbd> jump · <kbd>↓</kbd> duck · <kbd>C</kbd> cancel · <kbd>M</kbd> mute — or tap / swipe&nbsp;down</span>
+      <span class="legal">Parody. Not affiliated with, endorsed by, or representative of any real company.</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ============================== setup ============================== */
+const W = 960, H = 340, GROUND = 292;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let dpr = 1;
+function fit(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  cv.width = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+}
+fit();
+window.addEventListener('resize', fit);
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = {
+  blue: css('--fk-blue'), blueDk: css('--fk-blue-dk'), yellow: css('--fk-yellow'),
+  ink: css('--fk-ink'), cloud: css('--fk-cloud'), white: css('--fk-white'),
+  red: css('--alert-red'), green: css('--ok-green')
+};
+
+const rand = (a,b)=>a+Math.random()*(b-a);
+const pick = arr => arr[(Math.random()*arr.length)|0];
+const clamp = (v,a,b)=>v<a?a:(v>b?b:v);
+
+/* ============================== daily sale reskin ============================== */
+const SALES = {
+  0:['RESCHEDULED REPUBLIC SALE','Unity. Integrity. Pending delivery.'],
+  4:['SUMMER SALE: OUT FOR DELIVERY','Hot deals. Cold trail.'],
+  6:['MONSOON DELAYS FESTIVAL','Rain or shine, your parcel stays inside.'],
+  7:['FREEDOM (FROM PARCELS) SALE','Independence from receiving things.'],
+  9:['THE BIG BILLION DAYS OF WAITING','The sale ends. The tracking never does.'],
+  10:['BLACK FRIDAY, PARCEL MISSING','Doorbusters! Doorbells untouched.'],
+  11:['YEAR-END CLEARANCE (OF EXCUSES)','New year, same “out for delivery”.']
+};
+const sale = SALES[new Date().getMonth()] || ['THE GHOST SALE 👻','Deals so good they never materialize.'];
+document.getElementById('saleBurst').textContent = sale[0];
+document.getElementById('saleCopy').textContent = sale[1];
+
+/* ============================== audio ============================== */
+let AC = null, muted = false, masterGain = null;
+function audioInit(){
+  if (AC) return;
+  try{
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = AC.createGain();
+    masterGain.gain.value = 0.16;
+    masterGain.connect(AC.destination);
+  }catch(e){ AC = null; }
+}
+function tone(freq, dur, type='sine', t0=0, slideTo=null, vol=1){
+  if (!AC || muted) return;
+  const t = AC.currentTime + t0;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(30, slideTo), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+const sfx = {
+  jump(){ tone(300, .13, 'sine', 0, 520, .8); },
+  land(){ tone(150, .07, 'triangle', 0, 90, .5); },
+  token(){ tone(660, .09, 'square', 0, null, .45); tone(880, .12, 'square', .07, null, .45); },
+  refund(){ tone(660,.09,'square',0,null,.5); tone(880,.09,'square',.08,null,.5); tone(1175,.16,'square',.16,null,.5); },
+  death(){ tone(320, .5, 'sawtooth', 0, 60, .7); },
+  tick(){ tone(1400, .03, 'square', 0, null, .18); },
+  pulse(){ tone(140, .4, 'sawtooth', 0, 700, .55); },
+  deny(){ tone(220,.14,'square',0,null,.4); tone(165,.22,'square',.13,110,.4); },
+  phew(){ tone(760, .14, 'sine', 0, 1500, .45); }
+};
+const muteBtn = document.getElementById('muteBtn');
+muteBtn.addEventListener('click', e => { e.stopPropagation(); toggleMute(); });
+function toggleMute(){
+  muted = !muted;
+  muteBtn.setAttribute('aria-pressed', String(muted));
+  muteBtn.textContent = muted ? '🔇 Muted' : '🔊 Sound';
+}
+
+/* ============================== state ============================== */
+const MENU=0, RUN=1, HITSTOP=2, OVER=3;
+let state = MENU;
+let bestDays = 0;
+
+const G = {}; // run state
+function resetRun(){
+  G.t = 0;
+  G.dist = 0;
+  G.day = 1;
+  G.speed = 330;
+  G.milestone = 25;
+  G.spawnIn = 1.1;
+  G.tokenIn = 2.4;
+  G.tickerIn = 0.1;
+  G.tickerIdx = 0;
+  G.gagIn = rand(7, 12);
+  G.combo = 0;
+  G.comboT = 0;
+  G.cancel = 0;      // 0..1
+  G.hitstopT = 0;
+  G.shake = 0;
+  G.pulseR = -1;
+  obstacles.length = 0;
+  tokens.length = 0;
+  poppers.length = 0;
+  for (const p of particles) p.life = 0;
+  player.reset();
+  truck.x = 640; truck.mode = 0; truck.t = 0; truck.next = rand(5,9);
+  updateCancelUI();
+  updateDayUI();
+}
+
+/* ============================== player ============================== */
+const player = {
+  x: 140, y: GROUND, vy: 0, w: 26, h: 46,
+  onGround: true, ducking: false, duckT: 0,
+  holdT: 0, holding: false,
+  runT: 0, squash: 1, // <1 squashed, >1 stretched
+  reset(){
+    this.y = GROUND; this.vy = 0; this.onGround = true;
+    this.ducking = false; this.duckT = 0; this.runT = 0; this.squash = 1;
+    this.holding = false; this.holdT = 0;
+  },
+  jump(){
+    if (!this.onGround) return;
+    this.onGround = false;
+    this.vy = -640;
+    this.holding = true; this.holdT = 0;
+    this.squash = 1.28;
+    this.ducking = false;
+    sfx.jump();
+  },
+  duck(){
+    if (this.onGround){ this.ducking = true; this.duckT = 0.55; }
+    else { this.vy = Math.max(this.vy, 300); } // fast-fall
+  },
+  update(dt){
+    this.runT += dt * (G.speed/330) * 10;
+    if (!this.onGround){
+      let grav = 1900;
+      if (this.holding && this.vy < 0 && this.holdT < 0.22) grav = 1150;
+      this.holdT += dt;
+      this.vy += grav * dt;
+      this.y += this.vy * dt;
+      if (this.y >= GROUND){
+        this.y = GROUND; this.vy = 0; this.onGround = true;
+        this.squash = 0.72;
+        spawnDust(this.x, GROUND);
+        sfx.land();
+      }
+    }
+    if (this.ducking){
+      this.duckT -= dt;
+      if (this.duckT <= 0) this.ducking = false;
+    }
+    this.squash += (1 - this.squash) * Math.min(1, dt*10);
+  },
+  hitbox(){
+    const h = this.ducking ? 26 : 44;
+    return { x:this.x-11, y:this.y-h, w:22, h:h };
+  },
+  draw(g){
+    g.save();
+    g.translate(this.x, this.y);
+    const sy = this.squash, sx = 2 - this.squash;
+    g.scale(sx, sy);
+    g.strokeStyle = C.ink; g.fillStyle = C.ink;
+    g.lineWidth = 4; g.lineCap = 'round'; g.lineJoin = 'round';
+
+    if (this.ducking){
+      // rolled-up duck pose
+      g.beginPath(); g.arc(0, -14, 12, 0, Math.PI*2); g.fill();      // body ball
+      g.beginPath(); g.arc(8, -24, 7, 0, Math.PI*2); g.fill();       // head
+      g.fillStyle = C.blue; g.fillRect(14, -30, 6, 10);              // phone still out
+      g.restore(); return;
+    }
+
+    const air = !this.onGround;
+    const c = Math.sin(this.runT), s = Math.sin(this.runT + Math.PI);
+    // legs
+    g.beginPath();
+    if (air){
+      g.moveTo(0,-18); g.lineTo(-9,-4); g.lineTo(-13,2);
+      g.moveTo(0,-18); g.lineTo(9,-8);  g.lineTo(15,-12);
+    } else {
+      g.moveTo(0,-18); g.lineTo(-4 + c*8, -8); g.lineTo(-2 + c*11, 0);
+      g.moveTo(0,-18); g.lineTo(-4 + s*8, -8); g.lineTo(-2 + s*11, 0);
+    }
+    g.stroke();
+    // torso
+    g.beginPath(); g.moveTo(0,-18); g.lineTo(2,-36); g.stroke();
+    // head
+    g.beginPath(); g.arc(4,-43,6.5,0,Math.PI*2); g.fill();
+    // back arm swings
+    g.beginPath(); g.moveTo(1,-33); g.lineTo(-6 + s*4, -26 + c*2); g.stroke();
+    // front arm raised, holding phone, staring at tracking
+    g.beginPath(); g.moveTo(2,-33); g.lineTo(11,-36); g.lineTo(15,-42); g.stroke();
+    g.fillStyle = C.blue;
+    g.fillRect(12,-52,8,12);
+    g.fillStyle = '#fff'; g.fillRect(13.5,-50,5,7);
+    g.restore();
+  }
+};
+
+/* ============================== the truck you never catch ============================== */
+// modes: 0 = cruise ahead, 1 = drift back to taunt, 2 = flee off-screen
+const truck = { x: 640, mode: 0, t: 0, next: 6, wheel: 0 };
+function updateTruck(dt){
+  truck.wheel += (G.speed + (truck.mode===2 ? 260 : 0)) * dt / 90;
+  truck.t += dt;
+  let target, ease;
+  if (truck.mode === 0){                    // hover just ahead, gently drifting
+    target = 640 + Math.sin(G.t*0.6)*45; ease = 1.2;
+    if (truck.t > truck.next){ truck.mode = 1; truck.t = 0; }
+  } else if (truck.mode === 1){             // drift back… almost in reach…
+    target = player.x + 205; ease = 0.9;
+    if (truck.x <= player.x + 225){
+      truck.mode = 2; truck.t = 0;
+      addPopper(truck.x, GROUND-72, 'SO CLOSE!', C.red);
+      sfx.deny();
+    }
+  } else {                                  // …and gone. see you in a few days
+    target = W + 260; ease = 2.4;
+    if (truck.x >= W + 200){ truck.mode = 0; truck.t = 0; truck.next = rand(7,12); }
+  }
+  truck.x += (target - truck.x) * Math.min(1, dt*ease);
+  if (truck.mode === 2 && Math.random() < 0.35) spawnDust(truck.x - 58, GROUND);
+}
+function drawTruckWheel(g, x){
+  g.save(); g.translate(x, -9); g.rotate(truck.wheel);
+  g.fillStyle = C.ink; g.beginPath(); g.arc(0,0,9,0,Math.PI*2); g.fill();
+  g.strokeStyle = '#9AA6B8'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(-5,0); g.lineTo(5,0); g.moveTo(0,-5); g.lineTo(0,5); g.stroke();
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(0,0,2,0,Math.PI*2); g.fill();
+  g.restore();
+}
+function drawTruck(g){
+  if (truck.x > W + 120) return;
+  g.save(); g.translate(truck.x, GROUND);
+  // shadow
+  g.fillStyle = 'rgba(0,0,0,.12)';
+  g.beginPath(); g.ellipse(0, 2, 58, 6, 0, 0, Math.PI*2); g.fill();
+  // cargo box (cab faces right — it's always driving away from you)
+  g.fillStyle = '#fff'; g.strokeStyle = C.blueDk; g.lineWidth = 2.5;
+  rr(g, -56, -52, 78, 44, 4); g.fill(); g.stroke();
+  g.fillStyle = C.blue; g.fillRect(-56, -24, 78, 7);
+  g.fillStyle = C.blueDk; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.font = '900 10px system-ui, sans-serif';
+  g.fillText('SUPERFAST', -17, -37);
+  g.font = '600 7.5px system-ui, sans-serif';
+  g.fillText('DELIVERY *eventually', -17, -28);
+  // cab
+  g.fillStyle = C.blue;
+  g.beginPath();
+  g.moveTo(22,-8); g.lineTo(22,-44); g.lineTo(40,-44); g.lineTo(52,-26); g.lineTo(52,-8);
+  g.closePath(); g.fill();
+  g.fillStyle = '#DCE9FB';
+  g.beginPath(); g.moveTo(27,-40); g.lineTo(38,-40); g.lineTo(46,-27); g.lineTo(27,-27);
+  g.closePath(); g.fill();
+  drawTruckWheel(g, -36);
+  drawTruckWheel(g, 36);
+  g.restore();
+}
+
+/* ============================== particles ============================== */
+const particles = [];
+for (let i=0;i<220;i++) particles.push({life:0,x:0,y:0,vx:0,vy:0,size:2,col:'#fff',grav:0,shape:0,rot:0,vr:0});
+function spawnP(n, fn){
+  let made = 0;
+  for (const p of particles){
+    if (p.life > 0) continue;
+    fn(p); made++;
+    if (made >= n) break;
+  }
+}
+const pScale = reduceMotion ? 0.35 : 1;
+function spawnDust(x,y){
+  spawnP(Math.round(6*pScale)||2, p=>{
+    p.life = rand(.25,.5); p.x = x+rand(-8,8); p.y = y-2;
+    p.vx = rand(-70,-10); p.vy = rand(-60,-10);
+    p.size = rand(2,4.5); p.col = 'rgba(180,150,110,.8)'; p.grav = 60; p.shape=0;
+  });
+}
+function spawnSparkle(x,y,col){
+  spawnP(Math.round(12*pScale)||4, p=>{
+    const a = rand(0,Math.PI*2), sp = rand(50,190);
+    p.life = rand(.3,.6); p.x=x; p.y=y;
+    p.vx = Math.cos(a)*sp; p.vy = Math.sin(a)*sp;
+    p.size = rand(2,4); p.col = col; p.grav = 220; p.shape=0;
+  });
+}
+function spawnBurst(x,y){
+  spawnP(Math.round(26*pScale)||8, p=>{
+    const a = rand(0,Math.PI*2), sp = rand(90,320);
+    p.life = rand(.4,.9); p.x=x; p.y=y;
+    p.vx = Math.cos(a)*sp; p.vy = Math.sin(a)*sp - 80;
+    p.size = rand(3,6); p.col = pick([C.red,C.yellow,C.ink,'#fff']); p.grav = 500;
+    p.shape = 1; p.rot = rand(0,6); p.vr = rand(-8,8);
+  });
+}
+function spawnConfetti(){
+  spawnP(1, p=>{
+    p.life = rand(2.5,4); p.x = rand(0,W); p.y = -8;
+    p.vx = rand(-25,25); p.vy = rand(35,80);
+    p.size = rand(3,6); p.col = pick([C.yellow,'#fff','#8FD3FF',C.red]); p.grav=0;
+    p.shape=1; p.rot=rand(0,6); p.vr=rand(-4,4);
+  });
+}
+function updateParticles(dt){
+  for (const p of particles){
+    if (p.life<=0) continue;
+    p.life -= dt;
+    p.vy += p.grav*dt;
+    p.x += p.vx*dt; p.y += p.vy*dt;
+    p.rot += p.vr*dt;
+  }
+}
+function drawParticles(g){
+  for (const p of particles){
+    if (p.life<=0) continue;
+    g.globalAlpha = clamp(p.life*2, 0, 1);
+    g.fillStyle = p.col;
+    if (p.shape===1){
+      g.save(); g.translate(p.x,p.y); g.rotate(p.rot);
+      g.fillRect(-p.size/2,-p.size/3,p.size,p.size*0.66);
+      g.restore();
+    } else {
+      g.beginPath(); g.arc(p.x,p.y,p.size,0,Math.PI*2); g.fill();
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+/* ============================== obstacles & tokens ============================== */
+const obstacles = []; // {type,x,y,w,h,phase}
+const tokens = [];    // {type,x,y,taken}
+const poppers = [];   // floating score text {x,y,t,txt,col}
+
+const OB = {
+  CONE:{w:30,h:34}, PHONE:{w:26,h:40}, COIN:{w:32,h:32},
+  SHUTTER:{w:44,h:0}, NOTE:{w:22,h:22}
+};
+// keep the hold-music note fair at high speed — cap its bob amplitude
+const noteAmp = () => G.speed > 600 ? 5 : 10;
+
+function spawnObstacle(){
+  const late = G.day >= 15;
+  let types = ['CONE','CONE','PHONE','COIN'];
+  if (late) types = types.concat(['NOTE','SHUTTER','PHONE','COIN']);
+  const type = pick(types);
+
+  if (type === 'SHUTTER'){
+    obstacles.push({type, x: W+60, y: 0, w: OB.SHUTTER.w, h: GROUND-34, phase: 0});
+  } else if (type === 'NOTE'){
+    obstacles.push({type, x: W+60, y: GROUND-52, w: OB.NOTE.w, h: OB.NOTE.h, phase: rand(0,6)});
+  } else {
+    const d = OB[type];
+    obstacles.push({type, x: W+60, y: GROUND-d.h, w:d.w, h:d.h, phase:0});
+    // occasional fair cluster at higher speed
+    if (G.day > 40 && Math.random() < 0.3){
+      obstacles.push({type: pick(['CONE','COIN']), x: W+60+d.w+34, y: GROUND-34, w:30, h:34, phase:0});
+    }
+  }
+}
+function spawnToken(){
+  const r = Math.random();
+  const type = r < 0.45 ? 'CANCEL' : (r < 0.88 ? 'DELIVERY' : 'REFUND');
+  const y = GROUND - rand(85, 130);
+  tokens.push({type, x: W+40, y, taken:false, bob: rand(0,6)});
+}
+
+function drawObstacle(g, o){
+  g.save();
+  g.translate(o.x, 0);
+  g.lineWidth = 2.5; g.lineJoin='round';
+  if (o.type==='CONE'){
+    const bx = 0, by = GROUND;
+    g.fillStyle = C.red;
+    g.beginPath();
+    g.moveTo(bx+15, by-34); g.lineTo(bx+28, by); g.lineTo(bx+2, by); g.closePath(); g.fill();
+    g.fillStyle = '#fff';
+    g.beginPath(); g.moveTo(bx+11,by-18); g.lineTo(bx+19,by-18); g.lineTo(bx+21.5,by-10); g.lineTo(bx+8.5,by-10); g.closePath(); g.fill();
+    g.fillStyle = C.red; g.fillRect(bx-2, by-3, 34, 3);
+    label(g, 15, GROUND-40, 'RESCHEDULED');
+  } else if (o.type==='PHONE'){
+    g.fillStyle = C.ink;
+    rr(g, 0, GROUND-40, 26, 40, 5); g.fill();
+    g.fillStyle = '#fff'; rr(g, 3, GROUND-36, 20, 29, 3); g.fill();
+    g.strokeStyle = C.red; g.lineWidth = 3.5;
+    g.beginPath(); g.moveTo(8,GROUND-29); g.lineTo(18,GROUND-15); g.moveTo(18,GROUND-29); g.lineTo(8,GROUND-15); g.stroke();
+    label(g, 13, GROUND-46, 'CALL DROPPED');
+  } else if (o.type==='COIN'){
+    g.fillStyle = C.yellow; g.strokeStyle = '#C9A800';
+    g.beginPath(); g.arc(16, GROUND-16, 16, 0, Math.PI*2); g.fill(); g.stroke();
+    g.fillStyle = C.ink; g.font = '900 17px '+'"Arial Black",Impact,sans-serif';
+    g.textAlign='center'; g.textBaseline='middle';
+    g.fillText('₹', 16, GROUND-15);
+    label(g, 16, GROUND-38, 'EMI DUE');
+  } else if (o.type==='NOTE'){
+    const y = o.y + Math.sin(o.phase)*noteAmp();
+    g.fillStyle = C.blueDk; g.strokeStyle = C.blueDk; g.lineWidth=3;
+    g.beginPath(); g.ellipse(6, y+16, 6, 4.5, -0.3, 0, Math.PI*2); g.fill();
+    g.beginPath(); g.moveTo(11, y+15); g.lineTo(11, y-2); g.lineTo(20, y-5); g.stroke();
+    label(g, 11, y-12, 'ON HOLD');
+  } else if (o.type==='SHUTTER'){
+    // hangs from top; duck under the gap
+    g.fillStyle = '#9AA6B8';
+    g.fillRect(0, 0, o.w, o.h);
+    g.strokeStyle = '#7B8798'; g.lineWidth=2;
+    for (let y=8; y<o.h-4; y+=9){ g.beginPath(); g.moveTo(2,y); g.lineTo(o.w-2,y); g.stroke(); }
+    g.fillStyle = C.red; g.fillRect(-3, o.h-8, o.w+6, 10);
+    g.fillStyle = '#fff'; g.font='800 8px '+'system-ui,sans-serif';
+    g.textAlign='center'; g.fillText('SHUTTER CLOSED', o.w/2, o.h+0.5);
+    // arrow hint
+    g.fillStyle = C.blueDk; g.font='900 12px system-ui,sans-serif';
+    g.fillText('▼ DUCK', o.w/2, o.h+16);
+  }
+  g.restore();
+}
+function label(g,cx,y,txt){
+  g.fillStyle = 'rgba(33,33,33,.55)';
+  g.font = '700 8px system-ui, sans-serif';
+  g.textAlign = 'center'; g.textBaseline='alphabetic';
+  g.fillText(txt, cx, y);
+}
+function rr(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+
+function drawToken(g,t){
+  const y = t.y + Math.sin(G.t*4 + t.bob)*5;
+  g.save(); g.translate(t.x, y);
+  g.font='900 13px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  if (t.type==='DELIVERY'){
+    g.fillStyle=C.green; g.beginPath(); g.arc(0,0,15,0,Math.PI*2); g.fill();
+    g.fillText('📦',0,1);
+  } else if (t.type==='CANCEL'){
+    g.fillStyle=C.blue; g.beginPath(); g.arc(0,0,15,0,Math.PI*2); g.fill();
+    g.strokeStyle='#fff'; g.lineWidth=3.5;
+    g.beginPath(); g.moveTo(-5,-5); g.lineTo(5,5); g.moveTo(5,-5); g.lineTo(-5,5); g.stroke();
+  } else {
+    g.fillStyle=C.yellow; g.strokeStyle='#C9A800'; g.lineWidth=2;
+    g.beginPath(); g.arc(0,0,16,0,Math.PI*2); g.fill(); g.stroke();
+    g.fillStyle=C.ink; g.fillText('💸',0,1);
+  }
+  g.restore();
+}
+
+/* ============================== background ============================== */
+let bgOff1=0,bgOff2=0,bgOff3=0;
+function drawBG(g, dt, moving){
+  // sky
+  const sky = g.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#DCE9FB'); sky.addColorStop(1,'#EDF3FC');
+  g.fillStyle = sky; g.fillRect(0,0,W,H);
+
+  if (moving){
+    bgOff1 = (bgOff1 + G.speed*0.15*dt) % 240;
+    bgOff2 = (bgOff2 + G.speed*0.4*dt) % 300;
+    bgOff3 = (bgOff3 + G.speed*dt) % 64;
+  }
+
+  // far skyline
+  g.fillStyle = '#C3D6F2';
+  for (let i=-1;i<W/240+2;i++){
+    const x = i*240 - bgOff1;
+    g.fillRect(x, 150, 46, 100);
+    g.fillRect(x+60, 120, 34, 130);
+    g.fillRect(x+110, 165, 56, 85);
+    g.fillRect(x+180, 138, 30, 112);
+  }
+  // mid: warehouses + vans
+  for (let i=-1;i<W/300+2;i++){
+    const x = i*300 - bgOff2;
+    // warehouse
+    g.fillStyle = '#AAC2E8';
+    g.fillRect(x, 205, 110, 55);
+    g.fillStyle = '#93AFDD';
+    g.beginPath(); g.moveTo(x-6,205); g.lineTo(x+55,188); g.lineTo(x+116,205); g.closePath(); g.fill();
+    g.fillStyle = '#8AA6D6';
+    g.fillRect(x+14,222,26,38); g.fillRect(x+52,222,26,38);
+    // parked van
+    const vx = x+170;
+    g.fillStyle = '#B9CDEE';
+    rr(g,vx,232,72,26,4); g.fill();
+    g.fillRect(vx+52,222,20,14);
+    g.fillStyle = '#9FB8E4';
+    g.beginPath(); g.arc(vx+16,258,7,0,Math.PI*2); g.arc(vx+56,258,7,0,Math.PI*2); g.fill();
+  }
+  // ground: cardboard conveyor
+  g.fillStyle = '#D8B98C';
+  g.fillRect(0, GROUND, W, H-GROUND);
+  g.strokeStyle = 'rgba(140,100,55,.5)'; g.lineWidth = 2;
+  for (let i=-1;i<W/64+2;i++){
+    const x = i*64 - bgOff3;
+    g.beginPath(); g.moveTo(x, GROUND); g.lineTo(x, H); g.stroke();
+    // tape stripe
+    g.fillStyle = 'rgba(255,225,27,.5)';
+    g.fillRect(x+18, GROUND+14, 28, 5);
+    g.fillStyle = '#D8B98C';
+  }
+  g.strokeStyle = '#8C6437'; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(0,GROUND); g.lineTo(W,GROUND); g.stroke();
+}
+
+/* ============================== ticker & toasts ============================== */
+const statuses = [
+  'Out for delivery 🚚',
+  'Arrived at a Flipkart facility — BENGALURU',
+  'Left a Flipkart facility — BENGALURU',
+  'Arrived at a Flipkart facility — ERNAKULAM',
+  'Item received in the hub nearest to you ✅',
+  'Out for delivery (for real this time)',
+  'Delivery attempted — customer not available* (*you were home)',
+  'Address could not be located',
+  'Delivery rescheduled → Jul 05',
+  'Out for delivery 🎉',
+  'Your delivery agent is nearby! 📍',
+  'Delivery agent called you… and hung up ☎️',
+  'Delivery rescheduled → tomorrow',
+  'High demand due to Big Billion Days — sit tight!',
+  'Almost there! Just a little longer 💙',
+  'Out for delivery (day {N})',
+  'Delivery rescheduled → Jul 05 (again)'
+];
+// after the scripted statuses loop once, start remixing
+const svVerbs = [
+  'Arrived at a facility','Left a facility','Held at a facility',
+  'Rerouted via a facility','Misrouted to a facility','Scanned (twice) at a facility'
+];
+const svCities = ['GUWAHATI','BENGALURU','ERNAKULAM','LUDHIANA','NAGPUR','PATNA','SURAT','ITANAGAR','MADURAI','BHOPAL'];
+const svExcuses = [
+  'weather in Chennai','unexpected demand','address not found (it exists)',
+  'agent unreachable','network issue at hub','festive rush',
+  'vehicle breakdown','system upgrade in progress'
+];
+function nextStatus(){
+  if (G.tickerIdx < statuses.length) return statuses[G.tickerIdx];
+  if (Math.random() < 0.3) return pick(statuses);
+  return pick(svVerbs) + ' — ' + pick(svCities) + ' (' + pick(svExcuses) + ')';
+}
+const gags = [
+  'EMI due reminder: ₹— for the phone you don\u2019t have yet.',
+  'Rate your delivery experience! ⭐',
+  'Supervisor is raising this on priority.',
+  'New offer: pre-order the next phone!',
+  'We regret the inconvenience caused.',
+  'Kindly wait 24–48 hours.',
+  'Rest assured, it\u2019ll be delivered today.',
+  'Hurry — offer ends when your order arrives (i.e. never).'
+];
+const statusTxt = document.getElementById('statusTxt');
+function setStatus(txt){
+  statusTxt.classList.add('swap');
+  setTimeout(()=>{
+    statusTxt.textContent = txt.replace('{N}', G.day);
+    statusTxt.classList.remove('swap');
+  }, reduceMotion ? 0 : 220);
+}
+
+const toastsEl = document.getElementById('toasts');
+function toast(txt, kind='', ms=2400){
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' '+kind : '');
+  el.textContent = txt;
+  toastsEl.appendChild(el);
+  while (toastsEl.children.length > 3) toastsEl.removeChild(toastsEl.firstChild);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(), 350); }, ms);
+}
+
+/* ============================== HUD ============================== */
+const dayChip = document.getElementById('dayChip');
+const bestChip = document.getElementById('bestChip');
+const bestStart = document.getElementById('bestStart');
+const cancelFill = document.getElementById('cancelFill');
+const cancelBtn = document.getElementById('cancelBtn');
+
+function updateDayUI(){
+  dayChip.textContent = 'DAY ' + G.day;
+  bestChip.textContent = 'BEST ' + bestDays;
+}
+function updateCancelUI(){
+  cancelFill.style.width = Math.round(G.cancel*100) + '%';
+  const ready = G.cancel >= 1;
+  cancelBtn.disabled = !ready;
+  cancelBtn.classList.toggle('ready', ready);
+}
+cancelBtn.addEventListener('click', e => { e.stopPropagation(); tryCancel(); });
+function tryCancel(){
+  if (state !== RUN || G.cancel < 1) return;
+  G.cancel = 0; updateCancelUI();
+  G.pulseR = 1;
+  G.shake = Math.max(G.shake, 10);
+  sfx.pulse();
+  let wiped = 0;
+  for (const o of obstacles){
+    spawnBurst(o.x + (o.w||20)/2, o.type==='SHUTTER' ? o.h-10 : GROUND-16);
+    wiped++;
+  }
+  obstacles.length = 0;
+  const bonus = 3 + wiped;
+  G.dist += bonus * DAY_LEN;
+  addPopper(player.x+30, player.y-70, '+'+bonus+' days', C.blue);
+  toast('Manual cancellation raised.', 'good', 1900);
+  setTimeout(()=>{ if (state===RUN){ toast('Update: no cancellation request found on our system.', 'bad', 3000); sfx.deny(); } }, 2100);
+}
+
+function addPopper(x,y,txt,col){
+  poppers.push({x,y,t:0,txt,col});
+}
+
+/* ============================== collisions & tokens ============================== */
+function aabb(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+function obstacleBox(o){
+  if (o.type==='SHUTTER') return {x:o.x+4, y:0, w:o.w-8, h:o.h-6};
+  if (o.type==='NOTE'){ const y = o.y + Math.sin(o.phase)*noteAmp(); return {x:o.x+2, y:y-2, w:18, h:20}; }
+  return {x:o.x+4, y:o.y+4, w:o.w-8, h:o.h-4};
+}
+function collide(){
+  const hb = player.hitbox();
+  // forgiving margin
+  const p = {x:hb.x+3, y:hb.y+3, w:hb.w-6, h:hb.h-6};
+  for (const o of obstacles){
+    if (aabb(p, obstacleBox(o))) return true;
+  }
+  return false;
+}
+// near-miss: cleared an obstacle by a whisker → +1 day, PHEW popper
+function checkNearMiss(){
+  const hb = player.hitbox();
+  for (const o of obstacles){
+    if (o.counted) continue;
+    const b = obstacleBox(o);
+    if (!o.grazed){
+      const ex = {x: b.x-4, y: b.y-9, w: b.w+8, h: b.h+18};
+      if (aabb(hb, ex)) o.grazed = true;
+    }
+    if (b.x + b.w < hb.x){
+      o.counted = true;
+      if (o.grazed){
+        G.dist += DAY_LEN;
+        addPopper(player.x + 6, player.y - 66, 'PHEW! +1', C.green);
+        sfx.phew();
+      }
+    }
+  }
+}
+
+function grabTokens(){
+  const hb = player.hitbox();
+  const p = {x:hb.x-6, y:hb.y-6, w:hb.w+12, h:hb.h+12};
+  for (const t of tokens){
+    if (t.taken) continue;
+    const y = t.y + Math.sin(G.t*4+t.bob)*5;
+    if (aabb(p, {x:t.x-15,y:y-15,w:30,h:30})){
+      t.taken = true;
+      onToken(t, y);
+    }
+  }
+}
+function onToken(t, y){
+  G.combo = (G.comboT > 0) ? G.combo+1 : 1;
+  G.comboT = 3;
+  const mult = Math.min(G.combo, 5);
+  let bonus, col;
+  if (t.type==='DELIVERY'){
+    bonus = 2*mult; col = C.green;
+    toast('DELIVERED?! …just kidding — rescheduled.', 'good', 2200);
+    sfx.token();
+  } else if (t.type==='CANCEL'){
+    bonus = 2*mult; col = C.blue;
+    G.cancel = clamp(G.cancel + 0.25, 0, 1); updateCancelUI();
+    toast('CANCELLED! (request raised… allegedly)', 'blue', 2000);
+    sfx.token();
+  } else {
+    bonus = 6*mult; col = C.yellow;
+    toast('REFUND INITIATED → 5–7 business days', 'good', 2400);
+    sfx.refund();
+  }
+  G.dist += bonus * DAY_LEN;
+  spawnSparkle(t.x, y, col);
+  addPopper(t.x, y-18, '+'+bonus + (mult>1 ? '  x'+mult : ''), col);
+}
+
+/* ============================== game over ============================== */
+const startOverlay = document.getElementById('startOverlay');
+const overOverlay = document.getElementById('overOverlay');
+const stampEl = document.getElementById('stampEl');
+const overLine = document.getElementById('overLine');
+const overStats = document.getElementById('overStats');
+const overConsole = document.getElementById('overConsole');
+const absurdDates = ['Jul 05','Jul 03','tomorrow','Feb 30','the 32nd','soon™','after the sale ends'];
+const consolations = [
+  'Refund initiated (5–7 business days).',
+  'You\u2019ve earned 2 SuperCoins for your patience.',
+  'Your feedback matters! (it doesn\u2019t)',
+  'Supervisor will call you back. (they won\u2019t)'
+];
+
+/* ============================== score receipt ============================== */
+let lastRunDays = 0;
+const receiptBtn = document.getElementById('receiptBtn');
+receiptBtn.addEventListener('click', e => { e.stopPropagation(); downloadReceipt(); });
+
+function makeReceipt(days, best){
+  const rw = 420, rh = 660, m = 34;
+  const c = document.createElement('canvas');
+  c.width = rw*2; c.height = rh*2;   // 2x for crispness
+  const g = c.getContext('2d');
+  g.scale(2,2);
+  // backdrop + torn-paper receipt
+  g.fillStyle = '#DCE9FB'; g.fillRect(0,0,rw,rh);
+  g.fillStyle = '#fff';
+  g.beginPath();
+  const teeth = 14, tw = rw/teeth;
+  g.moveTo(0, 18);
+  for (let i=0;i<teeth;i++){ g.lineTo(i*tw + tw/2, 6); g.lineTo((i+1)*tw, 18); }
+  g.lineTo(rw, rh-18);
+  for (let i=teeth;i>0;i--){ g.lineTo(i*tw - tw/2, rh-6); g.lineTo((i-1)*tw, rh-18); }
+  g.closePath(); g.fill();
+
+  const MONO = '13px ui-monospace, Menlo, Consolas, monospace';
+  const dash = y => {
+    g.save(); g.setLineDash([5,5]); g.strokeStyle = '#B9C4D6'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(m, y); g.lineTo(rw-m, y); g.stroke(); g.restore();
+  };
+  const row = (y,k,v) => {
+    g.font = '600 ' + MONO; g.fillStyle = '#4b5563';
+    g.textAlign = 'left'; g.fillText(k, m, y);
+    g.fillStyle = C.ink; g.textAlign = 'right'; g.fillText(v, rw-m, y);
+  };
+
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.fillStyle = C.blue;
+  g.font = 'italic 900 27px "Arial Black", Impact, sans-serif';
+  g.fillText('BIG BILLION DELAYS', rw/2, 62);
+  g.fillStyle = '#6b7280'; g.font = '700 ' + MONO;
+  g.fillText('* OFFICIAL NON-DELIVERY RECEIPT *', rw/2, 86);
+
+  dash(102);
+  row(126, 'TRACKING', 'FMPP4111648148');
+  row(148, 'DATE', new Date().toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}));
+  row(170, 'ITEM', 'PHONE (ALLEGEDLY) x1');
+  row(192, 'STATUS', 'OUT FOR DELIVERY*');
+  dash(210);
+
+  g.fillStyle = C.ink; g.textAlign = 'center';
+  g.font = '900 96px "Arial Black", Impact, sans-serif';
+  g.fillText(String(days), rw/2, 316);
+  g.font = '800 15px system-ui, sans-serif'; g.fillStyle = '#4b5563';
+  g.fillText('DAYS CHASED', rw/2, 342);
+  g.font = '700 ' + MONO;
+  g.fillText('PERSONAL BEST: ' + best, rw/2, 366);
+
+  // stamp
+  g.save();
+  g.translate(rw/2, 424); g.rotate(-0.09);
+  g.strokeStyle = C.red; g.fillStyle = C.red;
+  g.lineWidth = 4; g.globalAlpha = 0.9;
+  g.font = '900 26px "Arial Black", Impact, sans-serif';
+  const sw = g.measureText('RESCHEDULED').width;
+  g.strokeRect(-sw/2-16, -24, sw+32, 46);
+  g.fillText('RESCHEDULED', 0, 10);
+  g.restore();
+
+  dash(470);
+
+  // fake barcode, seeded by the score so every run is unique
+  let s = days*7919 + 13;
+  const rnd = () => (s = (s*1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  let bx = m + 8;
+  g.fillStyle = C.ink;
+  while (bx < rw - m - 8){
+    const bwid = 1.5 + rnd()*3.5;
+    if (rnd() > 0.35) g.fillRect(bx, 490, bwid, 52);
+    bx += bwid + 1 + rnd()*3;
+  }
+  g.font = '600 ' + MONO; g.fillStyle = '#4b5563'; g.textAlign = 'center';
+  g.fillText('FMPP-4111-6481-' + days, rw/2, 562);
+
+  g.font = '600 11px ui-monospace, Menlo, monospace';
+  g.fillText('*out for delivery does not imply delivery', rw/2, 592);
+  g.font = '700 12px ui-monospace, Menlo, monospace';
+  g.fillStyle = C.ink;
+  g.fillText('THANK YOU FOR YOUR PATIENCE', rw/2, 616);
+  return c;
+}
+function downloadReceipt(){
+  const a = document.createElement('a');
+  a.download = 'big-billion-delays-day-' + lastRunDays + '.png';
+  a.href = makeReceipt(lastRunDays, bestDays).toDataURL('image/png');
+  a.click();
+  toast('Receipt saved. Frame it.', 'good', 1800);
+}
+
+function die(){
+  state = HITSTOP;
+  G.hitstopT = 0.06;
+  G.shake = 14;
+  spawnBurst(player.x, player.y-24);
+  sfx.death();
+}
+function showGameOver(){
+  state = OVER;
+  lastRunDays = G.day;
+  bestDays = Math.max(bestDays, G.day);
+  updateDayUI();
+  bestStart.textContent = '⭐ Best: ' + bestDays + ' days chased';
+  overLine.textContent = 'Now attempted on ' + pick(absurdDates) + '.';
+  overStats.textContent = 'You chased for ' + G.day + ' days. Best: ' + bestDays + '.';
+  overConsole.textContent = pick(consolations);
+  overOverlay.classList.remove('hidden');
+  stampEl.classList.remove('stamp-in');
+  void stampEl.offsetWidth;
+  stampEl.classList.add('stamp-in');
+  setStatus('Delivery rescheduled → ' + pick(absurdDates));
+}
+
+/* ============================== input ============================== */
+function primaryAction(){
+  audioInit();
+  if (AC && AC.state === 'suspended') AC.resume();
+  if (state === MENU) startRun();
+  else if (state === RUN) player.jump();
+  else if (state === OVER) startRun();
+}
+function startRun(){
+  resetRun();
+  startOverlay.classList.add('hidden');
+  overOverlay.classList.add('hidden');
+  state = RUN;
+  setStatus('Out for delivery 🚚');
+  stage.focus({preventScroll:true});
+}
+document.getElementById('startBtn').addEventListener('click', e=>{ e.stopPropagation(); primaryAction(); });
+document.getElementById('againBtn').addEventListener('click', e=>{ e.stopPropagation(); primaryAction(); });
+
+window.addEventListener('keydown', e=>{
+  if (e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW'){
+    e.preventDefault(); primaryAction();
+  } else if (e.code==='ArrowDown' || e.code==='KeyS'){
+    e.preventDefault(); if (state===RUN) player.duck();
+  } else if (e.code==='KeyC'){
+    tryCancel();
+  } else if (e.code==='KeyM'){
+    toggleMute();
+  }
+});
+window.addEventListener('keyup', e=>{
+  if (e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW') player.holding = false;
+});
+
+// touch: tap = jump, swipe down = duck
+let touchY0 = null, touchT0 = 0, touchMoved = false;
+stage.addEventListener('touchstart', e=>{
+  if (e.target.closest('button')) return;
+  e.preventDefault();
+  touchY0 = e.touches[0].clientY; touchT0 = performance.now(); touchMoved = false;
+}, {passive:false});
+stage.addEventListener('touchmove', e=>{
+  if (touchY0===null) return;
+  const dy = e.touches[0].clientY - touchY0;
+  if (dy > 28 && !touchMoved){
+    touchMoved = true;
+    if (state===RUN) player.duck(); else primaryAction();
+  }
+}, {passive:true});
+stage.addEventListener('touchend', e=>{
+  if (e.target.closest('button')) return;
+  e.preventDefault();
+  if (!touchMoved) primaryAction();
+  player.holding = false;
+  touchY0 = null;
+}, {passive:false});
+stage.addEventListener('mousedown', e=>{
+  if (e.target.closest('button')) return;
+  primaryAction();
+});
+window.addEventListener('mouseup', ()=>{ player.holding = false; });
+
+// pause on tab blur
+let paused = false;
+document.addEventListener('visibilitychange', ()=>{ paused = document.hidden; });
+
+/* ============================== update loop ============================== */
+const DAY_LEN = 260; // px of distance per "day"
+let lastMs = performance.now();
+
+function update(dt){
+  G.t += dt;
+
+  // speed ramp
+  G.speed = Math.min(720, 330 + G.day*4.2 + G.t*2);
+
+  // distance / days
+  G.dist += G.speed*dt;
+  const newDay = 1 + Math.floor(G.dist / DAY_LEN);
+  if (newDay !== G.day){
+    G.day = newDay;
+    updateDayUI();
+    sfx.tick();
+    if (G.day >= G.milestone){
+      toast(G.milestone + ' days! You\u2019re basically part of the logistics team now 🎉', 'blue', 2600);
+      G.milestone += 25;
+      G.speed += 12;
+    }
+  }
+
+  // survival trickle into cancel meter
+  if (G.cancel < 1){ G.cancel = clamp(G.cancel + dt*0.014, 0, 1); updateCancelUI(); }
+
+  // combo timer
+  if (G.comboT > 0){ G.comboT -= dt; if (G.comboT<=0) G.combo = 0; }
+
+  // ticker
+  G.tickerIn -= dt;
+  if (G.tickerIn <= 0){
+    G.tickerIn = 2.5;
+    setStatus(nextStatus());
+    G.tickerIdx++;
+  }
+  // gag toasts
+  G.gagIn -= dt;
+  if (G.gagIn <= 0){ G.gagIn = rand(8,14); toast(pick(gags), '', 2600); }
+
+  // spawn obstacles — gap scales with speed so everything stays clearable
+  G.spawnIn -= dt;
+  if (G.spawnIn <= 0){
+    spawnObstacle();
+    const minGapPx = G.speed*0.62 + 150;
+    const gapPx = minGapPx + rand(0, 260);
+    G.spawnIn = gapPx / G.speed;
+  }
+  // spawn tokens
+  G.tokenIn -= dt;
+  if (G.tokenIn <= 0){
+    // don't drop a token right on top of a fresh obstacle
+    spawnToken();
+    G.tokenIn = rand(2.2, 4.5);
+  }
+
+  // move world
+  for (const o of obstacles){ o.x -= G.speed*dt; if (o.type==='NOTE') o.phase += dt*3; }
+  for (const t of tokens) t.x -= G.speed*dt;
+  for (let i=obstacles.length-1;i>=0;i--) if (obstacles[i].x < -80) obstacles.splice(i,1);
+  for (let i=tokens.length-1;i>=0;i--) if (tokens[i].x < -40 || tokens[i].taken) tokens.splice(i,1);
+
+  player.update(dt);
+  updateTruck(dt);
+  grabTokens();
+  if (collide()) die();
+  else checkNearMiss();
+
+  // pulse ring
+  if (G.pulseR >= 0){ G.pulseR += dt*1400; if (G.pulseR > W*1.2) G.pulseR = -1; }
+
+  // poppers
+  for (let i=poppers.length-1;i>=0;i--){
+    const p = poppers[i]; p.t += dt; p.y -= 40*dt;
+    if (p.t > 0.9) poppers.splice(i,1);
+  }
+
+  G.shake = Math.max(0, G.shake - dt*32);
+  updateParticles(dt);
+}
+
+/* ============================== render ============================== */
+function render(dt){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  // screen shake
+  const shk = reduceMotion ? G.shake*0.15 : G.shake;
+  if (shk > 0.1){
+    ctx.translate(rand(-shk,shk)*0.5, rand(-shk,shk)*0.5);
+  }
+
+  drawBG(ctx, dt, state===RUN);
+
+  if (state === MENU){
+    if (!reduceMotion && Math.random() < 0.25) spawnConfetti();
+    updateParticles(dt);
+    drawParticles(ctx);
+    return;
+  }
+
+  drawTruck(ctx);
+  for (const o of obstacles) drawObstacle(ctx, o);
+  for (const t of tokens) drawToken(ctx, t);
+  player.draw(ctx);
+  drawParticles(ctx);
+
+  // cancel pulse ring
+  if (G.pulseR >= 0){
+    ctx.strokeStyle = C.blue;
+    ctx.globalAlpha = clamp(1 - G.pulseR/(W*1.2), 0, 1);
+    ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.arc(player.x, player.y-30, G.pulseR, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // poppers
+  for (const p of poppers){
+    ctx.globalAlpha = clamp(1.4 - p.t*1.6, 0, 1);
+    ctx.font = '900 16px "Arial Black",Impact,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4; ctx.strokeStyle = '#fff';
+    ctx.strokeText(p.txt, p.x, p.y);
+    ctx.fillStyle = p.col;
+    ctx.fillText(p.txt, p.x, p.y);
+    ctx.globalAlpha = 1;
+  }
+
+  // combo chip
+  if (G.combo > 1 && G.comboT > 0){
+    ctx.font = '900 14px "Arial Black",Impact,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = C.blueDk;
+    ctx.fillText('COMBO x' + Math.min(G.combo,5), 14, 26);
+  }
+}
+
+/* ============================== main loop ============================== */
+function frame(nowMs){
+  requestAnimationFrame(frame);
+  let dt = (nowMs - lastMs)/1000;
+  lastMs = nowMs;
+  if (paused){ return; }
+  dt = clamp(dt, 0, 0.05);
+
+  if (state === RUN){
+    update(dt);
+  } else if (state === HITSTOP){
+    G.hitstopT -= dt;
+    if (G.hitstopT <= 0) showGameOver();
+    // freeze world, still render
+  } else {
+    updateParticles(dt);
+    G.shake = Math.max(0, G.shake - dt*32);
+  }
+  render(dt);
+}
+requestAnimationFrame(frame);
+
+/* idle speech bubbles handled by start-screen copy; init HUD */
+resetRun();
+state = MENU;
+
+})();
+</script>
+</body>
+</html>

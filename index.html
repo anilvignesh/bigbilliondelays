@@ -265,6 +265,28 @@
     font-family:var(--mono); font-size:10px; background:#fff;
     border:1px solid #d4d9e2; border-bottom-width:2px; border-radius:4px; padding:1px 5px;
   }
+
+  /* ---------- Responsive: taller, roomier play area on phones ---------- */
+  @media (max-width: 720px){
+    .app{ padding:0 6px 10px; }
+    .appbar{ padding:9px 12px 11px; gap:8px; }
+    /* drop the fixed wide letterbox; give the game real vertical room */
+    .stage{ aspect-ratio:auto; height:min(52vh, 128vw); min-height:230px; }
+    .foot{ padding:8px 12px; }
+    .foot .hint{ display:none; }          /* touch players don't need key hints */
+    .trackhead{ padding:8px 12px; gap:8px; }
+    .status{ flex-basis:140px; font-size:12.5px; }
+    .daychip{ font-size:14px; padding:4px 9px; }
+    /* keep the cancel control inside the stage on narrow widths */
+    .cancelmeter{ width:clamp(70px,16vw,150px); height:12px; }
+    .cancelbtn{ font-size:10px; padding:6px 9px; letter-spacing:.2px; }
+  }
+  @media (max-width: 480px){
+    .searchbox{ display:none; }           /* reclaim a row for the game */
+    .wordmark{ font-size:16px; }
+    .cancelmeter{ width:clamp(58px,14vw,110px); }
+    .cancelbtn{ font-size:9.5px; padding:5px 8px; }
+  }
 </style>
 </head>
 <body>
@@ -316,7 +338,7 @@
     </div>
 
     <div class="foot">
-      <span class="hint"><kbd>Space</kbd>/<kbd>↑</kbd> jump · <kbd>↓</kbd> duck · <kbd>C</kbd> cancel · <kbd>M</kbd> mute — or tap / swipe&nbsp;down</span>
+      <span class="hint"><kbd>Space</kbd>/<kbd>↑</kbd> jump · <kbd>↓</kbd> duck · <kbd>C</kbd> cancel · <kbd>P</kbd> hold · <kbd>M</kbd> mute — or tap / swipe&nbsp;down</span>
       <span class="legal">Parody. Not affiliated with, endorsed by, or representative of any real company.</span>
     </div>
   </div>
@@ -327,7 +349,10 @@
 'use strict';
 
 /* ============================== setup ============================== */
-const W = 960, H = 340, GROUND = 292;
+// World resolution is responsive: on narrow screens we render a NARROWER,
+// TALLER world (bigger sprites, real vertical room) and scale speed + day
+// length by the same factor so timing/feel are identical to desktop.
+let W = 960, H = 340, GROUND = 292, SPEED_SCALE = 1, DAY_LEN = 260;
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const stage = document.getElementById('stage');
@@ -337,6 +362,14 @@ const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').match
 let dpr = 1;
 function fit(){
   dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const r = cv.getBoundingClientRect();
+  const cw = r.width || 960, ch = r.height || 340;
+  // narrower world on small screens → larger sprites; clamp so timing stays sane
+  W = Math.round(Math.max(600, Math.min(960, 1.5 * cw)));
+  H = Math.round(W * ch / cw);              // match the box aspect exactly (no stretch)
+  GROUND = H - 48;                          // keep the 48px conveyor band
+  SPEED_SCALE = W / 960;                    // horizontal speeds scale with world width…
+  DAY_LEN = 260 * SPEED_SCALE;              // …and day length with them, so day-rate is constant
   cv.width = Math.round(W * dpr);
   cv.height = Math.round(H * dpr);
 }
@@ -368,8 +401,14 @@ const sale = SALES[new Date().getMonth()] || ['THE GHOST SALE 👻','Deals so go
 document.getElementById('saleBurst').textContent = sale[0];
 document.getElementById('saleCopy').textContent = sale[1];
 
+/* ============================== persistence ============================== */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v===null ? d : v; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, String(v)); }catch(e){} }
+};
+
 /* ============================== audio ============================== */
-let AC = null, muted = false, masterGain = null;
+let AC = null, muted = store.get('bbd_mute','0') === '1', masterGain = null;
 function audioInit(){
   if (AC) return;
   try{
@@ -404,16 +443,22 @@ const sfx = {
 };
 const muteBtn = document.getElementById('muteBtn');
 muteBtn.addEventListener('click', e => { e.stopPropagation(); toggleMute(); });
-function toggleMute(){
-  muted = !muted;
+function reflectMute(){
   muteBtn.setAttribute('aria-pressed', String(muted));
   muteBtn.textContent = muted ? '🔇 Muted' : '🔊 Sound';
 }
+function toggleMute(){
+  muted = !muted;
+  store.set('bbd_mute', muted ? '1' : '0');
+  reflectMute();
+}
+reflectMute(); // restore persisted preference on load
 
 /* ============================== state ============================== */
 const MENU=0, RUN=1, HITSTOP=2, OVER=3;
 let state = MENU;
-let bestDays = 0;
+let bestDays = parseInt(store.get('bbd_best','0'), 10) || 0;
+let totalDays = parseInt(store.get('bbd_total','0'), 10) || 0; // lifetime days wasted
 
 const G = {}; // run state
 function resetRun(){
@@ -433,12 +478,15 @@ function resetRun(){
   G.hitstopT = 0;
   G.shake = 0;
   G.pulseR = -1;
+  G.flashT = 0;      // telegraph vignette timer
+  G.warned15 = false;
   obstacles.length = 0;
   tokens.length = 0;
   poppers.length = 0;
   for (const p of particles) p.life = 0;
   player.reset();
-  truck.x = 640; truck.mode = 0; truck.t = 0; truck.next = rand(5,9);
+  player.x = Math.round(W * 0.15);   // keep the runner's screen position consistent across widths
+  truck.x = Math.round(W * 0.66); truck.mode = 0; truck.t = 0; truck.next = rand(5,9);
   updateCancelUI();
   updateDayUI();
 }
@@ -543,7 +591,7 @@ function updateTruck(dt){
   truck.t += dt;
   let target, ease;
   if (truck.mode === 0){                    // hover just ahead, gently drifting
-    target = 640 + Math.sin(G.t*0.6)*45; ease = 1.2;
+    target = W*0.66 + Math.sin(G.t*0.6)*45; ease = 1.2;
     if (truck.t > truck.next){ truck.mode = 1; truck.t = 0; }
   } else if (truck.mode === 1){             // drift back… almost in reach…
     target = player.x + 205; ease = 0.9;
@@ -698,8 +746,13 @@ function spawnObstacle(){
 function spawnToken(){
   const r = Math.random();
   const type = r < 0.45 ? 'CANCEL' : (r < 0.88 ? 'DELIVERY' : 'REFUND');
+  let x = W + 40;
+  // never strand a token inside a full-height shutter — nudge it clear so it's always reachable
+  for (const o of obstacles){
+    if (o.type === 'SHUTTER' && Math.abs(o.x - x) < 90){ x = o.x + 160; break; }
+  }
   const y = GROUND - rand(85, 130);
-  tokens.push({type, x: W+40, y, taken:false, bob: rand(0,6)});
+  tokens.push({type, x, y, taken:false, bob: rand(0,6)});
 }
 
 function drawObstacle(g, o){
@@ -795,32 +848,35 @@ function drawBG(g, dt, moving){
     bgOff3 = (bgOff3 + G.speed*dt) % 64;
   }
 
-  // far skyline
+  // far skyline (anchored to the ground so it works at any world height)
+  const sb = GROUND - 42;                 // skyline base line
   g.fillStyle = '#C3D6F2';
   for (let i=-1;i<W/240+2;i++){
     const x = i*240 - bgOff1;
-    g.fillRect(x, 150, 46, 100);
-    g.fillRect(x+60, 120, 34, 130);
-    g.fillRect(x+110, 165, 56, 85);
-    g.fillRect(x+180, 138, 30, 112);
+    g.fillRect(x,     sb-100, 46, 100);
+    g.fillRect(x+60,  sb-130, 34, 130);
+    g.fillRect(x+110, sb-85,  56, 85);
+    g.fillRect(x+180, sb-112, 30, 112);
   }
   // mid: warehouses + vans
+  const mb = GROUND - 32;                  // warehouse base line
+  const vb = GROUND - 34;                  // van base line
   for (let i=-1;i<W/300+2;i++){
     const x = i*300 - bgOff2;
     // warehouse
     g.fillStyle = '#AAC2E8';
-    g.fillRect(x, 205, 110, 55);
+    g.fillRect(x, mb-55, 110, 55);
     g.fillStyle = '#93AFDD';
-    g.beginPath(); g.moveTo(x-6,205); g.lineTo(x+55,188); g.lineTo(x+116,205); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(x-6,mb-55); g.lineTo(x+55,mb-72); g.lineTo(x+116,mb-55); g.closePath(); g.fill();
     g.fillStyle = '#8AA6D6';
-    g.fillRect(x+14,222,26,38); g.fillRect(x+52,222,26,38);
+    g.fillRect(x+14,mb-38,26,38); g.fillRect(x+52,mb-38,26,38);
     // parked van
     const vx = x+170;
     g.fillStyle = '#B9CDEE';
-    rr(g,vx,232,72,26,4); g.fill();
-    g.fillRect(vx+52,222,20,14);
+    rr(g,vx,vb-26,72,26,4); g.fill();
+    g.fillRect(vx+52,vb-36,20,14);
     g.fillStyle = '#9FB8E4';
-    g.beginPath(); g.arc(vx+16,258,7,0,Math.PI*2); g.arc(vx+56,258,7,0,Math.PI*2); g.fill();
+    g.beginPath(); g.arc(vx+16,vb,7,0,Math.PI*2); g.arc(vx+56,vb,7,0,Math.PI*2); g.fill();
   }
   // ground: cardboard conveyor
   g.fillStyle = '#D8B98C';
@@ -1122,12 +1178,35 @@ function makeReceipt(days, best){
   g.fillText('THANK YOU FOR YOUR PATIENCE', rw/2, 616);
   return c;
 }
+function dataURLtoBlob(durl){
+  const [head, b64] = durl.split(',');
+  const mime = (head.match(/:(.*?);/) || [,'image/png'])[1];
+  const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], {type:mime});
+}
 function downloadReceipt(){
-  const a = document.createElement('a');
-  a.download = 'big-billion-delays-day-' + lastRunDays + '.png';
-  a.href = makeReceipt(lastRunDays, bestDays).toDataURL('image/png');
-  a.click();
-  toast('Receipt saved. Frame it.', 'good', 1800);
+  const name = 'big-billion-delays-day-' + lastRunDays + '.png';
+  const durl = makeReceipt(lastRunDays, bestDays).toDataURL('image/png');
+  const save = () => {
+    const a = document.createElement('a');
+    a.download = name; a.href = durl; a.click();
+    toast('Receipt saved. Frame it.', 'good', 1800);
+  };
+  // on mobile, offer the native share sheet (must stay in the tap gesture → no async before share)
+  try {
+    const file = new File([dataURLtoBlob(durl)], name, {type:'image/png'});
+    if (navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({
+        files:[file],
+        title:'BIG BILLION DELAYS',
+        text:'I chased a parcel for ' + lastRunDays + ' days and it never came. Beat me.'
+      }).then(()=> toast('Shared. Misery loves company.', 'good', 1800))
+        .catch(err => { if (!err || err.name !== 'AbortError') save(); });
+      return;
+    }
+  } catch(e){ /* fall through to download */ }
+  save();
 }
 
 function die(){
@@ -1140,11 +1219,13 @@ function die(){
 function showGameOver(){
   state = OVER;
   lastRunDays = G.day;
-  bestDays = Math.max(bestDays, G.day);
+  if (G.day > bestDays){ bestDays = G.day; store.set('bbd_best', bestDays); }
+  totalDays += G.day; store.set('bbd_total', totalDays);
   updateDayUI();
   bestStart.textContent = '⭐ Best: ' + bestDays + ' days chased';
   overLine.textContent = 'Now attempted on ' + pick(absurdDates) + '.';
-  overStats.textContent = 'You chased for ' + G.day + ' days. Best: ' + bestDays + '.';
+  overStats.textContent = 'You chased for ' + G.day + ' days. Best: ' + bestDays +
+                          '. ⏳ ' + totalDays + ' days of your life, all-time.';
   overConsole.textContent = pick(consolations);
   overOverlay.classList.remove('hidden');
   stampEl.classList.remove('stamp-in');
@@ -1155,6 +1236,7 @@ function showGameOver(){
 
 /* ============================== input ============================== */
 function primaryAction(){
+  if (manualPause){ setPause(false); return; } // any tap/press resumes
   audioInit();
   if (AC && AC.state === 'suspended') AC.resume();
   if (state === MENU) startRun();
@@ -1181,6 +1263,8 @@ window.addEventListener('keydown', e=>{
     tryCancel();
   } else if (e.code==='KeyM'){
     toggleMute();
+  } else if (e.code==='KeyP' || e.code==='Escape'){
+    if (state===RUN) setPause(!manualPause);
   }
 });
 window.addEventListener('keyup', e=>{
@@ -1219,15 +1303,21 @@ window.addEventListener('mouseup', ()=>{ player.holding = false; });
 let paused = false;
 document.addEventListener('visibilitychange', ()=>{ paused = document.hidden; });
 
+// manual pause (P key, or tap the paused screen to resume)
+let manualPause = false, pauseDrawn = false;
+function setPause(on){
+  if (state !== RUN) return;
+  manualPause = on; pauseDrawn = false;
+}
+
 /* ============================== update loop ============================== */
-const DAY_LEN = 260; // px of distance per "day"
 let lastMs = performance.now();
 
 function update(dt){
   G.t += dt;
 
-  // speed ramp
-  G.speed = Math.min(720, 330 + G.day*4.2 + G.t*2);
+  // speed ramp (logical speed, then scaled to the current world width)
+  G.speed = Math.min(720, 330 + G.day*4.2 + G.t*2) * SPEED_SCALE;
 
   // distance / days
   G.dist += G.speed*dt;
@@ -1236,6 +1326,12 @@ function update(dt){
     G.day = newDay;
     updateDayUI();
     sfx.tick();
+    // telegraph: the tougher obstacle mix (shutters + hold-music) unlocks at day 15
+    if (G.day >= 15 && !G.warned15){
+      G.warned15 = true; G.flashT = 0.75;
+      toast('⚠ Peak-season surcharge — shutters & hold-music incoming. Duck & weave.', 'bad', 3200);
+      sfx.deny();
+    }
     if (G.day >= G.milestone){
       toast(G.milestone + ' days! You\u2019re basically part of the logistics team now 🎉', 'blue', 2600);
       G.milestone += 25;
@@ -1271,7 +1367,6 @@ function update(dt){
   // spawn tokens
   G.tokenIn -= dt;
   if (G.tokenIn <= 0){
-    // don't drop a token right on top of a fresh obstacle
     spawnToken();
     G.tokenIn = rand(2.2, 4.5);
   }
@@ -1298,6 +1393,7 @@ function update(dt){
   }
 
   G.shake = Math.max(0, G.shake - dt*32);
+  if (G.flashT > 0) G.flashT = Math.max(0, G.flashT - dt);
   updateParticles(dt);
 }
 
@@ -1355,14 +1451,40 @@ function render(dt){
     ctx.fillStyle = C.blueDk;
     ctx.fillText('COMBO x' + Math.min(G.combo,5), 14, 26);
   }
+
+  // difficulty telegraph: red vignette pulse when a tougher tier unlocks
+  if (G.flashT > 0){
+    const a = clamp(G.flashT, 0, 1) * 0.5;
+    const grd = ctx.createRadialGradient(W/2, GROUND, H*0.18, W/2, GROUND, W*0.62);
+    grd.addColorStop(0, 'rgba(255,97,97,0)');
+    grd.addColorStop(1, 'rgba(255,97,97,' + a + ')');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, W, H);
+  }
 }
 
 /* ============================== main loop ============================== */
+function drawPauseOverlay(){
+  render(0); // freeze the current frame underneath
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle = 'rgba(27,90,208,.62)';
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '900 34px "Arial Black",Impact,sans-serif';
+  ctx.fillText('⏸  ON HOLD', W/2, H/2 - 10);
+  ctx.font = '700 14px system-ui,sans-serif';
+  ctx.fillText('Your call is important to us. Tap / press P to resume the wait.', W/2, H/2 + 24);
+}
 function frame(nowMs){
   requestAnimationFrame(frame);
   let dt = (nowMs - lastMs)/1000;
   lastMs = nowMs;
   if (paused){ return; }
+  if (manualPause && state===RUN){
+    if (!pauseDrawn){ drawPauseOverlay(); pauseDrawn = true; }
+    return;
+  }
   dt = clamp(dt, 0, 0.05);
 
   if (state === RUN){
@@ -1382,6 +1504,9 @@ requestAnimationFrame(frame);
 /* idle speech bubbles handled by start-screen copy; init HUD */
 resetRun();
 state = MENU;
+bestStart.textContent = '⭐ Best: ' + bestDays + ' days chased' +
+  (totalDays > 0 ? '  ·  ⏳ ' + totalDays + ' wasted all-time' : '');
+updateDayUI();
 
 })();
 </script>
